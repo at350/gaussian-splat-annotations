@@ -78,7 +78,8 @@ camera.position.set(0, 0, 2);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-const splat = new SplatMesh({ url: '../assets/dormtest.ply' });
+const splatUrl = new URL('../assets/dormtest.ply', import.meta.url).href;
+const splat = new SplatMesh({ url: splatUrl });
 scene.add(splat);
 
 // Camera framing
