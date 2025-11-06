@@ -12641,7 +12641,7 @@ void main() {
   button { background:#2a2a2a; color:#e2e2e2; border:1px solid #3a3a3a; border-radius:8px; padding:6px 8px; cursor:pointer; }
   button:hover { filter:brightness(1.1); }
   input, textarea { background:#111; color:#eaeaea; border:1px solid #2d2d2d; border-radius:8px; width:100%; }
-`;document.head.appendChild(hh);const an=new Nu;an.background=new zt(1118481);const Re=new Oe(60,window.innerWidth/window.innerHeight,.01,1e3);Re.position.set(0,0,2);const mn=new Um(Re,oe.domElement);mn.enableDamping=!0;const DC=new URL("../assets/dormtest.ply",import.meta.url).href,_r=new lA({url:DC});an.add(_r);mn.target.set(.1,0,-.35);Re.position.set(0,0,.6);Re.lookAt(mn.target);mn.update();const RC=new as(.02,.02,.02),NC=new tA({color:16711680}),fA=new He(RC,NC);fA.position.copy(mn.target);fA.visible=!0;an.add(fA);const pA="dormtest.ply",ii=[];function FC(i,t,e){const n=document.createElement("div");return n.className="label",n.innerHTML=`
+`;document.head.appendChild(hh);const an=new Nu;an.background=new zt(1118481);const Re=new Oe(60,window.innerWidth/window.innerHeight,.01,1e3);Re.position.set(0,0,2);const mn=new Um(Re,oe.domElement);mn.enableDamping=!0;const DC="/assets/dormtest.ply",_r=new lA({url:DC});an.add(_r);mn.target.set(.1,0,-.35);Re.position.set(0,0,.6);Re.lookAt(mn.target);mn.update();const RC=new as(.02,.02,.02),NC=new tA({color:16711680}),fA=new He(RC,NC);fA.position.copy(mn.target);fA.visible=!0;an.add(fA);const pA="dormtest.ply",ii=[];function FC(i,t,e){const n=document.createElement("div");return n.className="label",n.innerHTML=`
     <div class="hdr">${i||"Untitled"}</div>
     <div class="desc">${t||""}</div>
     <div class="chip">#${e+1}</div>
