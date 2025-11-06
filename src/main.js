@@ -7,14 +7,12 @@ import { SplatMesh } from '@sparkjsdev/spark';
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.domElement.style.touchAction = 'none';
+Object.assign(renderer.domElement.style, { position:'fixed', inset:'0', touchAction:'none', display:'block' });
 document.body.appendChild(renderer.domElement);
 
 const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(window.innerWidth, window.innerHeight);
-labelRenderer.domElement.style.position = 'absolute';
-labelRenderer.domElement.style.top = '0';
-labelRenderer.domElement.style.pointerEvents = 'none';
+Object.assign(labelRenderer.domElement.style, { position:'fixed', inset:'0', pointerEvents:'none' });
 document.body.appendChild(labelRenderer.domElement);
 
 // ---------- UI ----------
@@ -23,7 +21,7 @@ ui.style.cssText = `
   position:absolute; top:12px; right:12px; width:300px; max-height:80vh; overflow:auto;
   font: 13px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:#eaeaea; 
   background: rgba(20,20,20,0.7); border:1px solid #2a2a2a; border-radius:10px; padding:10px;
-  backdrop-filter:saturate(120%) blur(6px);
+  backdrop-filter:saturate(120%) blur(6px); z-index:10;
 `;
 ui.innerHTML = `
   <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
@@ -46,6 +44,30 @@ ui.innerHTML = `
 `;
 document.body.appendChild(ui);
 
+// ---------- DECOR CSS ----------
+const style = document.createElement('style');
+style.textContent = `
+  .label {
+    pointer-events:auto;
+    background:rgba(10,10,10,0.85);
+    color:#f2f2f2;
+    border:1px solid #2f2f2f;
+    border-radius:8px;
+    padding:6px 8px;
+    max-width:220px;
+    box-shadow:0 2px 10px rgba(0,0,0,0.35);
+    transform:translateY(-6px);
+    line-height:1.25;
+  }
+  .label .hdr { font-weight:600; margin-bottom:2px; }
+  .label .desc { font-size:12px; opacity:0.9; white-space:pre-wrap; }
+  .label .chip { font-size:10px; opacity:0.7; }
+  button { background:#2a2a2a; color:#e2e2e2; border:1px solid #3a3a3a; border-radius:8px; padding:6px 8px; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  input, textarea { background:#111; color:#eaeaea; border:1px solid #2d2d2d; border-radius:8px; width:100%; }
+`;
+document.head.appendChild(style);
+
 // ---------- SCENE ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
@@ -61,11 +83,11 @@ scene.add(splat);
 
 // Camera framing
 controls.target.set(0.1, 0, -0.35);
-camera.position.set(0, 0, 0.6); // NEW: step back a bit
+camera.position.set(0, 0, 0.6);
 camera.lookAt(controls.target);
 controls.update();
 
-// Center marker for this splat specifically
+// Center marker
 const boxGeo = new THREE.BoxGeometry(0.02, 0.02, 0.02);
 const boxMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 const targetMarker = new THREE.Mesh(boxGeo, boxMat);
@@ -73,14 +95,11 @@ targetMarker.position.copy(controls.target);
 targetMarker.visible = true;
 scene.add(targetMarker);
 
-// ---------- ANNOTATION SYSTEM ----------
-// Data model
+// ---------- ANNOTATIONS ----------
 const assetName = 'dormtest.ply';
 const annotations = []; // {id, world[3], title, body, label, leader, created, updated}
-const raycaster = new THREE.Raycaster();
-const clickPlane = new THREE.Plane(new THREE.Vector3(0,0,-1), 0); // camera-aligned per click
 
-// Create label
+// Create label DOM
 function makeLabelDOM(title, body, idx) {
   const el = document.createElement('div');
   el.className = 'label';
@@ -92,14 +111,13 @@ function makeLabelDOM(title, body, idx) {
   return el;
 }
 
-// Create annotation
+// Create annotation entity
 function addAnnotation(world, title, body) {
   const idx = annotations.length;
   const labelEl = makeLabelDOM(title, body, idx);
   const label = new CSS2DObject(labelEl);
   label.position.copy(world);
 
-  // leader line (world-space short elbow)
   const lineGeom = new THREE.BufferGeometry().setFromPoints([world.clone(), world.clone()]);
   const lineMat  = new THREE.LineBasicMaterial({ color: 0xffffff, depthTest:false, transparent:true, opacity:0.9 });
   const leader   = new THREE.Line(lineGeom, lineMat);
@@ -122,34 +140,31 @@ function addAnnotation(world, title, body) {
   return ann;
 }
 
-// Position label with a small camera-facing offset and update leader
+// Per-frame label placement
 function updateAnnotationVisual(ann) {
   const anchorPos = new THREE.Vector3().fromArray(ann.world);
-
   const toCam = anchorPos.clone().sub(camera.position).normalize();
   const right = new THREE.Vector3().crossVectors(toCam, camera.up).normalize();
   const up    = new THREE.Vector3().crossVectors(right, toCam).normalize();
 
-  // Offset label
-  const elbow = anchorPos.clone()
-    .add(right.multiplyScalar(0.12))
-    .add(up.multiplyScalar(0.06));
+  const elbow = anchorPos.clone().add(right.multiplyScalar(0.12)).add(up.multiplyScalar(0.06));
   ann.label.position.copy(elbow);
 
-  // Update leader points: [anchor, just-short-of-elbow]
   const arr = ann.leader.geometry.attributes.position.array;
   arr[0]=anchorPos.x; arr[1]=anchorPos.y; arr[2]=anchorPos.z;
   arr[3]=elbow.x-0.01; arr[4]=elbow.y; arr[5]=elbow.z;
   ann.leader.geometry.attributes.position.needsUpdate = true;
 }
 
-// UI list
+// Sidebar
 function refreshList() {
   const list = document.getElementById('list');
   list.innerHTML = '';
   annotations.forEach((a, i) => {
     const row = document.createElement('div');
-    row.className = 'ui-row';
+    row.style.display = 'flex';
+    row.style.gap = '6px';
+    row.style.alignItems = 'center';
     row.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:2px; max-width:200px;">
         <div style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${a.title || 'Untitled'}</div>
@@ -169,7 +184,6 @@ function refreshList() {
       const t = prompt('Title', a.title) ?? a.title;
       const b = prompt('Description', a.body) ?? a.body;
       a.title = t; a.body = b; a.updated = Date.now();
-      // update DOM
       a.label.element.querySelector('.hdr').textContent = t || 'Untitled';
       a.label.element.querySelector('.desc').textContent = b || '';
       refreshList();
@@ -178,7 +192,6 @@ function refreshList() {
     row.querySelector('[data-act="del"]').onclick = () => {
       scene.remove(a.label); scene.remove(a.leader);
       annotations.splice(i,1);
-      // reindex label chips
       annotations.forEach((ann,j)=>{
         const chip = ann.label.element.querySelector('.chip');
         if (chip) chip.textContent = `#${j+1}`;
@@ -190,30 +203,134 @@ function refreshList() {
   });
 }
 
-// ---------- CLICK-TO-PLACE (plane-based placeholder) ----------
+// ---------- PICK PASS (Option A) ----------
+/*
+  We render the splat once to a 1×1 RGBA32F target, where the fragment writes world XYZ.
+  If a splat covers the click pixel, alpha=1 and RGB=world position. Otherwise alpha=0.
+  Steps:
+    - Clone camera via setViewOffset to render only the target pixel
+    - Temporarily swap the splat’s material for a pick material
+    - Render to offscreen target and read back 4 floats
+*/
+const supportsFloatRT =
+  renderer.capabilities.isWebGL2 &&
+  !!renderer.extensions.get('EXT_color_buffer_float');
+
+const pickTarget = new THREE.WebGLRenderTarget(1, 1, {
+  type: THREE.FloatType,
+  format: THREE.RGBAFormat,
+  depthBuffer: true,
+  stencilBuffer: false
+});
+pickTarget.texture.name = 'pickTarget';
+
+const pickMaterial = new THREE.ShaderMaterial({
+  name: 'SplatPickMaterial',
+  vertexShader: /* glsl */`
+    uniform mat4 modelMatrix;
+    uniform mat4 viewMatrix;
+    uniform mat4 projectionMatrix;
+    attribute vec3 position;
+    varying vec3 vWorld;
+    void main() {
+      vec4 wp = modelMatrix * vec4(position, 1.0);
+      vWorld = wp.xyz;
+      gl_Position = projectionMatrix * viewMatrix * wp;
+      // Note: This treats each splat as a point at its mean. Good match if means lie on the apparent surface.
+    }
+  `,
+  fragmentShader: /* glsl */`
+    precision highp float;
+    varying vec3 vWorld;
+    void main() {
+      gl_FragColor = vec4(vWorld, 1.0);
+    }
+  `,
+  blending: THREE.NoBlending,
+  depthTest: true,
+  depthWrite: true,
+  transparent: false
+});
+
+function pickWorldAtClientXY(clientX, clientY) {
+  if (!supportsFloatRT) return null;
+
+  // Convert to drawing buffer pixels
+  const rect = renderer.domElement.getBoundingClientRect();
+  const pxRatio = renderer.getPixelRatio();
+  const x = Math.floor((clientX - rect.left) * pxRatio);
+  const y = Math.floor((rect.bottom - clientY) * pxRatio); // y flip for viewOffset
+
+  // Get full drawing buffer size
+  const size = new THREE.Vector2();
+  renderer.getDrawingBufferSize(size);
+
+  // Save camera offset, swap material
+  const clearColor = renderer.getClearColor(new THREE.Color()).clone();
+  const clearAlpha = renderer.getClearAlpha();
+  const origMaterial = splat.material;
+
+  splat.material = pickMaterial;
+
+  // Set 1×1 view into the big buffer at (x,y)
+  camera.setViewOffset(size.x, size.y, x, y - 1, 1, 1); // y-1 to hit the exact pixel row
+  renderer.setRenderTarget(pickTarget);
+  renderer.setClearColor(0x000000, 0.0);
+  renderer.clear(true, true, true);
+  renderer.render(scene, camera);
+
+  // Read back
+  const buf = new Float32Array(4);
+  renderer.readRenderTargetPixels(pickTarget, 0, 0, 1, 1, buf);
+
+  // Restore state
+  camera.clearViewOffset();
+  splat.material = origMaterial;
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(clearColor, clearAlpha);
+
+  if (buf[3] === 0) return null; // no hit
+  const v = new THREE.Vector3(buf[0], buf[1], buf[2]);
+  if (!Number.isFinite(v.x) || !Number.isFinite(v.y) || !Number.isFinite(v.z)) return null;
+  return v;
+}
+
+// ---------- CLICK HANDLING ----------
+const raycaster = new THREE.Raycaster();
+const clickPlane = new THREE.Plane(new THREE.Vector3(0,0,-1), 0);
 let placeOnClick = false;
+
 document.getElementById('addOnClickBtn').onclick = () => {
   placeOnClick = true;
-  // orient click plane to face camera through controls.target
   const n = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
   clickPlane.setFromNormalAndCoplanarPoint(n, controls.target);
 };
 
 renderer.domElement.addEventListener('click', (ev) => {
   if (!placeOnClick) return;
-  // normalized device coords
-  const ndc = new THREE.Vector2(
-    (ev.clientX / renderer.domElement.clientWidth) * 2 - 1,
-    -(ev.clientY / renderer.domElement.clientHeight) * 2 + 1
-  );
-  raycaster.setFromCamera(ndc, camera);
-  const hit = new THREE.Vector3();
-  if (raycaster.ray.intersectPlane(clickPlane, hit)) {
+
+  // First try the splat-aware pick
+  let hit = pickWorldAtClientXY(ev.clientX, ev.clientY);
+
+  // Fallback to plane if nothing hit
+  if (!hit) {
+    const ndc = new THREE.Vector2(
+      (ev.clientX / renderer.domElement.clientWidth) * 2 - 1,
+      -(ev.clientY / renderer.domElement.clientHeight) * 2 + 1
+    );
+    raycaster.setFromCamera(ndc, camera);
+    hit = new THREE.Vector3();
+    const ok = raycaster.ray.intersectPlane(clickPlane, hit);
+    if (!ok) hit = null;
+  }
+
+  if (hit) {
     const title = document.getElementById('titleInput').value.trim();
     const body  = document.getElementById('bodyInput').value.trim();
     addAnnotation(hit, title, body);
     saveLocal();
   }
+
   placeOnClick = false;
 });
 
@@ -267,7 +384,6 @@ document.getElementById('importFile').onchange = async (e) => {
   const f = e.target.files?.[0]; if (!f) return;
   const text = await f.text();
   localStorage.setItem(localKey(), text);
-  // wipe current and reload
   annotations.splice(0).forEach(a=>{ scene.remove(a.label); scene.remove(a.leader); });
   loadLocal();
 };
@@ -283,9 +399,8 @@ window.addEventListener('resize', onResize);
 
 // ---------- LOOP ----------
 renderer.setAnimationLoop(() => {
-  // update visuals per frame
   annotations.forEach(updateAnnotationVisual);
-  controls.update(); // FIX: call it
+  controls.update();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 });
